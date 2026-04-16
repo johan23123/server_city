@@ -4,12 +4,10 @@ from datetime import datetime
 
 app = FastAPI()
 
-# Función para conectar a la DB
 def conectar_db():
     conn = sqlite3.connect('logistica_city.db')
     return conn
 
-# Crear las tablas apenas arranca
 @app.on_event("startup")
 def startup():
     conn = conectar_db()
@@ -46,3 +44,20 @@ def recibir_gps(data: dict = Body(...)):
     conn.commit()
     conn.close()
     return {"status": "ok"}
+
+# --- ESTO ES LO QUE TE FALTA SUBIR A GITHUB ---
+@app.get("/posiciones_actuales")
+def obtener_posiciones():
+    conn = conectar_db()
+    cursor = conn.cursor()
+    # Esta consulta busca el ÚLTIMO punto de cada camión
+    query = """
+    SELECT v.chofer, v.estado, p.lat, p.lon, p.hora 
+    FROM viajes v
+    JOIN posiciones p ON v.id = p.id_viaje
+    WHERE p.id IN (SELECT MAX(id) FROM posiciones GROUP BY id_viaje)
+    """
+    cursor.execute(query)
+    filas = cursor.fetchall()
+    conn.close()
+    return [{"chofer": f[0], "estado": f[1], "lat": f[2], "lon": f[3], "hora": f[4]} for f in filas]
