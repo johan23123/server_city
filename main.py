@@ -1,63 +1,39 @@
-from fastapi import FastAPI, Body
-import sqlite3
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from datetime import datetime
 
-app = FastAPI()
+app = Flask(__name__)
+CORS(app)
 
-def conectar_db():
-    conn = sqlite3.connect('logistica_city.db')
-    return conn
+# Diccionario para guardar lo último de cada chofer
+posiciones = {}
 
-@app.on_event("startup")
-def startup():
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS viajes 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, chofer TEXT, estado TEXT, inicio TEXT)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS posiciones 
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, id_viaje INTEGER, lat REAL, lon REAL, hora TEXT, estado TEXT)''')
-    conn.commit()
-    conn.close()
+@app.route('/iniciar', methods=['GET'])
+def iniciar():
+    chofer = request.args.get('chofer', 'Chofer_City')
+    viaje_id = int(datetime.now().timestamp())
+    return jsonify({"id_viaje": viaje_id, "status": "ok"})
 
-@app.get("/")
-def home():
-    return {"status": "City Constructora Server Online"}
+@app.route('/gps', methods=['POST'])
+def recibir_gps():
+    data = request.json
+    chofer_name = data.get('chofer', 'Chofer_City')
+    
+    # IMPORTANTE: Pasamos a mayúsculas y quitamos espacios
+    estado_limpio = str(data.get('estado', 'IDA')).upper().strip()
 
-@app.get("/iniciar")
-def iniciar_viaje(chofer: str):
-    conn = conectar_db()
-    cursor = conn.cursor()
-    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute("INSERT INTO viajes (chofer, estado, inicio) VALUES (?, 'IDA', ?)", (chofer, ahora))
-    id_viaje = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return {"id_viaje": id_viaje}
+    posiciones[chofer_name] = {
+        "chofer": chofer_name,
+        "lat": data.get('lat'),
+        "lon": data.get('lon'),
+        "estado": estado_limpio, # Aquí entrará "VUELTA" bien limpio
+        "hora": datetime.now().strftime('%H:%M:%S')
+    }
+    return jsonify({"status": "recibido"})
 
-@app.post("/gps")
-def recibir_gps(data: dict = Body(...)):
-    conn = conectar_db()
-    cursor = conn.cursor()
-    ahora = datetime.now().strftime("%H:%M:%S")
-    cursor.execute("INSERT INTO posiciones (id_viaje, lat, lon, hora, estado) VALUES (?, ?, ?, ?, ?)",
-                   (data['id_viaje'], data['lat'], data['lon'], ahora, data['estado']))
-    conn.commit()
-    conn.close()
-    return {"status": "ok"}
+@app.route('/posiciones_actuales', methods=['GET'])
+def enviar_posiciones():
+    return jsonify(list(posiciones.values()))
 
-# --- ESTO ES LO QUE TE FALTA SUBIR A GITHUB ---
-@app.get("/posiciones_actuales")
-def obtener_posiciones():
-    conn = conectar_db()
-    cursor = conn.cursor()
-    # Esta consulta busca el ÚLTIMO punto de cada camión
-    query = """
-    SELECT v.chofer, v.estado, p.lat, p.lon, p.hora 
-    FROM viajes v
-    JOIN posiciones p ON v.id = p.id_viaje
-    WHERE p.id IN (SELECT MAX(id) FROM posiciones GROUP BY id_viaje)
-    """
-    cursor.execute(query)
-    filas = cursor.fetchall()
-    conn.close()
-    return [{"chofer": f[0], "estado": f[1], "lat": f[2], "lon": f[3], "hora": f[4]} for f in filas]
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
