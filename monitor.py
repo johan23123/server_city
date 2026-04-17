@@ -1,38 +1,55 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from datetime import datetime
+import streamlit as st
+import pandas as pd
+import folium
+import requests
+from streamlit_folium import st_folium
+from streamlit_autorefresh import st_autorefresh
+from datetime import datetime, timedelta
 
-app = Flask(__name__)
-CORS(app)
+st.set_page_config(page_title="City Monitor GPS", layout="wide")
 
-# Diccionario para guardar lo último de cada chofer
-posiciones = {}
+# Refrescar cada 5 segundos
+st_autorefresh(interval=5000, key="datarefresh")
 
-@app.route('/iniciar', methods=['GET'])
-def iniciar():
-    chofer = request.args.get('chofer', 'Anonimo')
-    viaje_id = int(datetime.now().timestamp())
-    return jsonify({"id_viaje": viaje_id, "status": "ok"})
+st.title("🚚 Panel de Control - City Constructora")
 
-@app.route('/gps', methods=['POST'])
-def recibir_gps():
-    data = request.json
-    chofer_name = "Chofer_City" # O podés recibirlo en el JSON
+URL_RENDER = "https://server-city.onrender.com/posiciones_actuales"
+
+try:
+    response = requests.get(URL_RENDER)
+    datos = response.json()
     
-    # GUARDAMOS TODO: lat, lon y el ESTADO dinámico que viene del celu
-    posiciones[chofer_name] = {
-        "chofer": chofer_name,
-        "lat": data.get('lat'),
-        "lon": data.get('lon'),
-        "estado": data.get('estado', 'S/D').upper(), # ACÁ SE RECIBE EL "VUELTA"
-        "hora": datetime.now().strftime('%H:%M:%S')
-    }
-    print(f"Recibido: {posiciones[chofer_name]}")
-    return jsonify({"status": "recibido"})
+    if isinstance(datos, list) and len(datos) > 0:
+        df = pd.DataFrame(datos)
+        
+        # AJUSTE DE HORA (Servidor UTC a Argentina -3)
+        df['hora_dt'] = pd.to_datetime(df['hora'], format='%H:%M:%S', errors='coerce')
+        df['hora'] = (df['hora_dt'] - timedelta(hours=3)).dt.strftime('%H:%M:%S')
+        
+        m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=14)
 
-@app.route('/posiciones_actuales', methods=['GET'])
-def enviar_posiciones():
-    return jsonify(list(posiciones.values()))
+        for _, row in df.iterrows():
+            est = str(row['estado']).upper().strip()
+            
+            # Lógica de colores definitiva
+            if est == 'VUELTA':
+                color_icono = 'blue'
+            elif est == 'ENTREGA' or est == 'OBRA':
+                color_icono = 'orange'
+            else:
+                color_icono = 'green' # Para IDA o cualquier otro
+            
+            folium.Marker(
+                [row['lat'], row['lon']],
+                popup=f"Chofer: {row['chofer']} | Estado: {est} | Hora: {row['hora']}",
+                tooltip=f"{row['chofer']} ({est})",
+                icon=folium.Icon(color=color_icono, icon='truck', prefix='fa')
+            ).add_to(m)
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+        st_folium(m, width=1200, height=500, key="mapa_fijo")
+        st.table(df[['chofer', 'estado', 'hora']])
+        
+    else:
+        st.info("📡 Esperando señal de camiones...")
+except Exception as e:
+    st.error("Conectando con el servidor...")
