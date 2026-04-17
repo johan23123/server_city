@@ -8,11 +8,12 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="City Monitor GPS", layout="wide")
 
-# Refrescar cada 5 segundos
+# Refrescar cada 5 segundos para ver el movimiento
 st_autorefresh(interval=5000, key="datarefresh")
 
 st.title("🚚 Panel de Control - City Constructora")
 
+# URL de tu servidor en Render
 URL_RENDER = "https://server-city.onrender.com/posiciones_actuales"
 
 try:
@@ -22,17 +23,17 @@ try:
     if isinstance(datos, list) and len(datos) > 0:
         df = pd.DataFrame(datos)
         
-        # ARREGLO DE HORA (Jujuy es -3 horas respecto al servidor)
+        # AJUSTE DE HORA (De Servidor a Jujuy -3hs)
         df['hora_dt'] = pd.to_datetime(df['hora'], format='%H:%M:%S', errors='coerce')
         df['hora'] = (df['hora_dt'] - timedelta(hours=3)).dt.strftime('%H:%M:%S')
         
         m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=14)
 
         for _, row in df.iterrows():
-            # Limpiamos el estado para comparar
+            # Limpiamos el estado: Mayúsculas y sin espacios
             est = str(row['estado']).upper().strip()
             
-            # Lógica de colores:
+            # Colores: IDA (Verde), VUELTA (Azul), OBRA (Naranja)
             if est == 'VUELTA':
                 color_icono = 'blue'
             elif est == 'ENTREGA' or est == 'OBRA':
@@ -53,6 +54,6 @@ try:
         st.table(df[['chofer', 'estado', 'hora']])
         
     else:
-        st.info("📡 Esperando señal... El chofer debe iniciar el viaje.")
+        st.info("📡 Esperando señal... El chofer debe iniciar el viaje en la App.")
 except Exception as e:
     st.error("Conectando con el servidor de City...")
