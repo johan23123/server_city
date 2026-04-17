@@ -22,22 +22,23 @@ try:
     if isinstance(datos, list) and len(datos) > 0:
         df = pd.DataFrame(datos)
         
-        # AJUSTE DE HORA (Servidor UTC a Argentina -3)
+        # ARREGLO DE HORA (Jujuy es -3 horas respecto al servidor)
         df['hora_dt'] = pd.to_datetime(df['hora'], format='%H:%M:%S', errors='coerce')
         df['hora'] = (df['hora_dt'] - timedelta(hours=3)).dt.strftime('%H:%M:%S')
         
         m = folium.Map(location=[df['lat'].mean(), df['lon'].mean()], zoom_start=14)
 
         for _, row in df.iterrows():
+            # Limpiamos el estado para comparar
             est = str(row['estado']).upper().strip()
             
-            # Lógica de colores definitiva
+            # Lógica de colores:
             if est == 'VUELTA':
                 color_icono = 'blue'
             elif est == 'ENTREGA' or est == 'OBRA':
                 color_icono = 'orange'
             else:
-                color_icono = 'green' # Para IDA o cualquier otro
+                color_icono = 'green' # Por defecto IDA
             
             folium.Marker(
                 [row['lat'], row['lon']],
@@ -47,9 +48,11 @@ try:
             ).add_to(m)
 
         st_folium(m, width=1200, height=500, key="mapa_fijo")
+        
+        st.subheader("Planilla de Movimientos")
         st.table(df[['chofer', 'estado', 'hora']])
         
     else:
-        st.info("📡 Esperando señal de camiones...")
+        st.info("📡 Esperando señal... El chofer debe iniciar el viaje.")
 except Exception as e:
-    st.error("Conectando con el servidor...")
+    st.error("Conectando con el servidor de City...")
