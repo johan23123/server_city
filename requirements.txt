@@ -1,2 +1,6 @@
-fastapi
-uvicorn
+streamlit
+pandas
+folium
+requests
+streamlit-folium
+streamlit-autorefresh
