@@ -5,7 +5,6 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
-# Diccionario para guardar lo último de cada chofer
 posiciones = {}
 
 @app.route('/iniciar', methods=['GET'])
@@ -19,14 +18,14 @@ def recibir_gps():
     data = request.json
     chofer_name = data.get('chofer', 'Chofer_City')
     
-    # IMPORTANTE: Pasamos a mayúsculas y quitamos espacios
-    estado_limpio = str(data.get('estado', 'IDA')).upper().strip()
+    # Esto es lo que arregla la VUELTA:
+    estado_recibido = str(data.get('estado', 'IDA')).upper().strip()
 
     posiciones[chofer_name] = {
         "chofer": chofer_name,
         "lat": data.get('lat'),
         "lon": data.get('lon'),
-        "estado": estado_limpio, # Aquí entrará "VUELTA" bien limpio
+        "estado": estado_recibido,
         "hora": datetime.now().strftime('%H:%M:%S')
     }
     return jsonify({"status": "recibido"})
